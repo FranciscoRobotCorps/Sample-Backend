@@ -1,0 +1,43 @@
+services:
+  hermes-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hermes-api
+    env_file:
+      - .env.docker
+    ports:
+      - "3001:3000"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    networks:
+      - hermes-net
+    restart: unless-stopped
+
+  mariadb:
+    image: mariadb:11.4
+    container_name: hermes-mariadb
+    env_file:
+      - .env.docker
+    ports:
+      - "3307:3306"
+    volumes:
+      - hermes-db-data:/var/lib/mysql
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    networks:
+      - hermes-net
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "--password=${MARIADB_ROOT_PASSWORD:-hermes}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  hermes-db-data:
+
+networks:
+  hermes-net:
+    driver: bridge
