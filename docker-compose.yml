@@ -14,6 +14,9 @@ services:
     networks:
       - hermes-net
     restart: unless-stopped
+    environment:
+      - JWT_SECRET=hermes_jwt_secret_key_for_dev
+      - REFRESH_TOKEN_SECRET=hermes_refresh_token_secret_key_for_dev
 
   mariadb:
     image: mariadb:11.4

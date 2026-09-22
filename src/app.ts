@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import { getPool } from './db/pool';
 import { errorHandler, notFound } from './middleware/errors';
 import todosRouter from './routes/todos';
+import authRouter from './routes/auth';
 
 export function createApp(): express.Express {
   const app = express();
@@ -24,6 +25,10 @@ export function createApp(): express.Express {
     res.status(db.status === 'ok' ? 200 : 503).json({ status: db.status === 'ok' ? 'ok' : 'degraded', db });
   });
 
+  // Authentication routes
+  app.use('/api/auth', authRouter);
+  
+  // Protected routes - todos endpoint now requires authentication
   app.use('/api/todos', todosRouter);
 
   app.use(notFound);

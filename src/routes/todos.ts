@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { getPool } from '../db/pool';
 import { validate } from '../middleware/validate';
+import { requireAuth } from '../middleware/auth';
 import {
   createTodoSchema,
   listTodosQuerySchema,
@@ -20,6 +21,9 @@ export interface TodoRow extends RowDataPacket {
 }
 
 const router = Router();
+
+// Apply authentication middleware to all routes
+router.use(requireAuth);
 
 // GET /api/todos?done=true|false&limit=50&offset=0
 router.get(
@@ -56,7 +60,7 @@ router.get(
 router.get(
   '/:id',
   validate({ params: todoIdParamsSchema }),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
     const [rows] = await getPool().execute<TodoRow[]>(
       'SELECT id, title, description, done, created_at, updated_at FROM todos WHERE id = ?',
@@ -68,14 +72,14 @@ router.get(
       return;
     }
     res.json(todo);
-  },
+  }),
 );
 
 // POST /api/todos
 router.post(
   '/',
   validate({ body: createTodoSchema }),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const { title, description } = req.body as {
       title: string;
       description?: string;
@@ -90,14 +94,14 @@ router.post(
       [result.insertId],
     );
     res.status(201).json(rows[0]);
-  },
+  }),
 );
 
 // PATCH /api/todos/:id
 router.patch(
   '/:id',
   validate({ params: todoIdParamsSchema, body: updateTodoSchema }),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
     const { title, description, done } = req.body as {
       title?: string;
@@ -135,14 +139,14 @@ router.patch(
       [id],
     );
     res.json(rows[0]);
-  },
+  }),
 );
 
 // DELETE /api/todos/:id
 router.delete(
   '/:id',
   validate({ params: todoIdParamsSchema }),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
     const [result] = await getPool().execute<ResultSetHeader>('DELETE FROM todos WHERE id = ?', [
       id,
@@ -152,7 +156,7 @@ router.delete(
       return;
     }
     res.status(204).send();
-  },
+  }),
 );
 
 export default router;

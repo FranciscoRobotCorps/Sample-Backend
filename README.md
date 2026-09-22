@@ -11,6 +11,7 @@ A small backend API built with **Node.js + Express + TypeScript**, using **zod**
 | Language     | TypeScript (strict)             |
 | Validation   | zod (body / query / params)     |
 | Database     | MariaDB via `mysql2` pool       |
+| Auth         | JWT (access + refresh tokens)   |
 
 ## Project layout
 
@@ -26,11 +27,13 @@ hermes/
 │   │   └── pool.ts         # shared mysql2 connection pool
 │   ├── middleware/
 │   │   ├── validate.ts     # zod validation middleware
-│   │   └── errors.ts       # error handler (zod / DB / HTTP errors)
-│   ├── schemas/
-│   │   └── todo.schema.ts  # zod schemas for the todo API
-│   └── routes/
-│       └── todos.ts        # todos CRUD endpoints
+│   │   ├── errors.ts       # error handler (zod / DB / HTTP errors)
+│   │   └── auth.ts         # JWT authentication middleware
+│   ├── routes/
+│   │   ├── todos.ts        # todos CRUD endpoints
+│   │   └── auth.ts         # auth endpoints (login, refresh, logout)
+│   └── types/
+│       └── express.d.ts    # Express Request type augmentation
 ├── .env.example
 ├── package.json
 └── tsconfig.json
@@ -42,8 +45,24 @@ hermes/
 
 ```bash
 cp .env.example .env
-# then edit .env with your MariaDB credentials
+# then edit .env with your MariaDB credentials and JWT secrets
 ```
+
+The `.env` file must include:
+
+| Variable                | Description                              | Default                          |
+| ----------------------- | ---------------------------------------- | -------------------------------- |
+| `PORT`                  | Server port                              | `3000`                           |
+| `NODE_ENV`              | Environment (`development`, `production`) | `development`                    |
+| `DB_HOST`               | MariaDB host                             | `127.0.0.1`                      |
+| `DB_PORT`               | MariaDB port                             | `3306`                           |
+| `DB_USER`               | MariaDB user                             | `hermes`                         |
+| `DB_PASSWORD`           | MariaDB password                          | `hermes`                         |
+| `DB_NAME`               | Database name                            | `hermes`                         |
+| `JWT_SECRET`            | Secret for signing access tokens         | `hermes_jwt_secret_key`          |
+| `REFRESH_TOKEN_SECRET`  | Secret for signing refresh tokens        | `hermes_refresh_token_secret_key`|
+
+> **Important**: In production, use strong random strings for both JWT secrets and rotate them periodically.
 
 ### 2. Create the database
 
@@ -70,7 +89,83 @@ The server listens on `http://localhost:3000` by default.
 
 Health check; reports DB connectivity.
 
+### Authentication — `/api/auth`
+
+The API uses **JWT (JSON Web Tokens)** with a dual-token strategy:
+
+- **Access token** (`access_token`) — Short-lived (15 min by default), sent in the `Authorization: Bearer <token>` header.
+- **Refresh token** (`refresh_token`) — Long-lived (7 days by default), used to obtain new access tokens without re-login.
+
+Both tokens are signed with separate secrets configured via environment variables (`JWT_SECRET` and `REFRESH_TOKEN_SECRET`).
+
+| Method | Path         | Body                          | Description                    |
+| ------ | ------------ | ----------------------------- | ------------------------------ |
+| POST   | `/api/auth/login`    | `{ email, password }`    | Login and receive access + refresh tokens  |
+| POST   | `/api/auth/refresh`  | `{ refresh_token }`      | Exchange a valid refresh token for a new access token |
+| POST   | `/api/auth/logout`   | —                        | Logout (optional — for token revocation)   |
+
+#### Login
+
+```bash
+curl -X POST http://localhost:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"user@example.com","password":"password123"}'
+```
+
+**Success (200):**
+```json
+{
+  "access_token": "eyJ...",
+  "refresh_token": "eyJ..."
+}
+```
+
+**Error (401) — Invalid credentials:**
+```json
+{
+  "error": "Invalid email or password"
+}
+```
+
+#### Refresh
+
+```bash
+curl -X POST http://localhost:3000/api/auth/refresh \
+  -H 'Content-Type: application/json' \
+  -d '{"refresh_token":"eyJ..."}'
+```
+
+**Success (200):**
+```json
+{
+  "access_token": "eyJ.new-access-token..."
+}
+```
+
+**Error (401) — Invalid or expired refresh token:**
+```json
+{
+  "error": "Invalid or expired refresh token"
+}
+```
+
+#### Logout
+
+```bash
+curl -X POST http://localhost:3000/api/auth/logout
+```
+
+**Success (200):**
+```json
+{
+  "message": "Logged out successfully"
+}
+```
+
 ### Todos — `/api/todos`
+
+> **Note**: All todo endpoints require a valid access token. Include it in the `Authorization` header:  
+> `Authorization: Bearer <your_access_token>`
 
 | Method | Path         | Body                          | Description                    |
 | ------ | ------------ | ----------------------------- | ------------------------------ |
@@ -85,24 +180,45 @@ All requests are validated with **zod**; invalid input returns `400` with the li
 ### Examples
 
 ```bash
-# Create
+# Login first to get tokens
+curl -X POST http://localhost:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"user@example.com","password":"password123"}'
+
+# Use the access token for all subsequent requests
+export TOKEN="eyJ..."
+
+# Create (authenticated)
 curl -X POST http://localhost:3000/api/todos \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"title":"Ship the backend","description":"Node + Express + TS + zod + MariaDB"}'
 
-# List (only undone, max 10)
-curl 'http://localhost:3000/api/todos?done=false&limit=10'
+# List (only undone, max 10) — authenticated
+curl 'http://localhost:3000/api/todos?done=false&limit=10' \
+  -H "Authorization: Bearer $TOKEN"
 
-# Update
+# Update — authenticated
 curl -X PATCH http://localhost:3000/api/todos/1 \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"done":true}'
 
-# Delete
-curl -X DELETE http://localhost:3000/api/todos/1
+# Delete — authenticated
+curl -X DELETE http://localhost:3000/api/todos/1 \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ### Example responses
+
+`401` Unauthorized (missing or invalid token):
+
+```json
+{
+  "error": "Unauthorized",
+  "message": "No token provided"
+}
+```
 
 `400` validation error:
 
