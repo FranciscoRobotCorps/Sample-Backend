@@ -250,3 +250,86 @@ curl -X DELETE http://localhost:3000/api/todos/1 \
 | `npm run build`      | Compile to `dist/`              |
 | `npm start`          | Run compiled output             |
 | `npm run typecheck`  | Type-check without emitting     |
+
+
+
+## Docker / Docker Compose
+
+The project ships a **Dockerfile** and a **docker-compose.yml** so you can run the entire stack (app + MariaDB) with a single command.
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) & [Docker Compose v2](https://docs.docker.com/compose/install/)
+
+### Quick start
+
+```bash
+# 1. Build and start everything in the background
+docker compose up --build -d
+
+# 2. Wait for MariaDB to be ready (the entrypoint script handles this automatically,
+#    but you can verify):
+docker compose logs -f app
+
+# 3. Run the DB schema migration inside the running container:
+docker compose exec app npm run db:migrate
+
+# 4. The API is now live at http://localhost:3000
+curl http://localhost:3000/health
+```
+
+### Stop / tear down
+
+```bash
+# Stop containers (keep volumes)
+docker compose stop
+
+# Stop and remove all containers, networks (volumes preserved)
+docker compose down
+
+# Stop and remove everything including named volumes
+docker compose down -v
+```
+
+### Environment variables in Docker
+
+The `docker-compose.yml` reads `.env` automatically.  Copy the example file first:
+
+```bash
+cp .env.example .env
+```
+
+Key variables (defaults shown):
+
+| Variable               | Default                        | Description                          |
+| ---------------------- | ------------------------------ | ------------------------------------ |
+| `PORT`                 | `3000`                         | HTTP port                            |
+| `DB_HOST`              | `db`                           | MariaDB service name in compose      |
+| `DB_PORT`              | `3306`                         | MariaDB port                         |
+| `DB_USER`              | `hermes`                       | DB user                              |
+| `DB_PASSWORD`          | `hermes`                       | DB password                          |
+| `DB_NAME`              | `hermes`                       | Database name                        |
+| `JWT_SECRET`           | `hermes_jwt_secret_key`        | Access-token secret                  |
+| `REFRESH_TOKEN_SECRET` | `hermes_refresh_token_secret_key` | Refresh-token secret               |
+
+### Dockerfile details
+
+The image is multi-stage:
+
+1. **Build stage** (`node:20-alpine`) — installs dependencies, runs type-check and build.
+2. **Production stage** (`node:20-alpine`) — copies only `dist/` and `package.json`, installs production deps, runs as non-root user.
+
+### Docker Compose services
+
+| Service | Description                          |
+| ------- | ------------------------------------ |
+| `app`   | Node.js API server (port 3000)       |
+| `db`    | MariaDB 10.11 container              |
+
+The `db` service exposes port **3307** on the host (mapped from 3306 inside the container) so you can connect with a local MySQL client if needed.
+
+### Running tests in Docker
+
+```bash
+docker compose exec app npm test
+```

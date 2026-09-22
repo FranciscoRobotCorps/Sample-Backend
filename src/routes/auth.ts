@@ -1,29 +1,19 @@
+import bcrypt from 'bcrypt';
 import { Router } from 'express';
+import type { RowDataPacket, ResultSetHeader } from 'mysql2';
 import jwt from 'jsonwebtoken';
 import { getPool } from '../db/pool';
 import { asyncHandler } from '../utils/asyncHandler';
 import { HttpError } from '../middleware/errors';
 import { generateAccessToken, generateRefreshToken } from '../middleware/auth';
 
-// In a real application, you'd have proper user validation with password hashing
-// For this example, we'll simulate authentication with a hardcoded user
-
-export interface User {
+interface DbUser extends RowDataPacket {
   id: number;
   email: string;
-  passwordHash?: string;
+  password_hash: string;
 }
 
 const router = Router();
-
-// Mock user data - in a real app this would come from the database
-const mockUsers: User[] = [
-  {
-    id: 1,
-    email: 'user@example.com',
-    passwordHash: '$2b$10$...' // This would be a hashed password in production
-  }
-];
 
 // Login endpoint - returns access and refresh tokens
 router.post('/login', asyncHandler(async (req, res) => {
@@ -33,17 +23,22 @@ router.post('/login', asyncHandler(async (req, res) => {
     throw new HttpError(400, 'Email and password are required');
   }
 
-  // Find user in mock data
-  const user = mockUsers.find(u => u.email === email);
-  
+  // Query database for user by email
+  const [rows] = await getPool().execute<DbUser[]>(
+    'SELECT id, email, password_hash FROM users WHERE email = ?',
+    [email],
+  );
+  const user = rows[0];
+
   if (!user) {
     throw new HttpError(401, 'Invalid credentials');
   }
 
-  // In a real app, you would verify the password hash here
-  // if (!bcrypt.compareSync(password, user.passwordHash)) {
-  //   throw new HttpError(401, 'Invalid credentials');
-  // }
+  // Verify password against stored bcrypt hash
+  const validPassword = await bcrypt.compare(password, user.password_hash);
+  if (!validPassword) {
+    throw new HttpError(401, 'Invalid credentials');
+  }
 
   // Generate tokens
   const accessToken = generateAccessToken(user.id, user.email);
@@ -54,8 +49,8 @@ router.post('/login', asyncHandler(async (req, res) => {
     refresh_token: refreshToken,
     user: {
       id: user.id,
-      email: user.email
-    }
+      email: user.email,
+    },
   });
 }));
 
@@ -69,24 +64,27 @@ router.post('/refresh', asyncHandler(async (req, res) => {
 
   try {
     // Verify refresh token
-    const decoded = jwt.verify(refresh_token, process.env.REFRESH_TOKEN_SECRET || 'hermes_refresh_token_secret_key') as { userId: number; email: string };
-    
+    const decoded = jwt.verify(
+      refresh_token,
+      process.env.REFRESH_TOKEN_SECRET || 'hermes_refresh_token_secret_key',
+    ) as { userId: number; email: string };
+
     // Generate new access token
     const newAccessToken = generateAccessToken(decoded.userId, decoded.email);
 
     res.json({
-      access_token: newAccessToken
+      access_token: newAccessToken,
     });
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError) {
-      throw new HttpError(401, 'Invalid refresh token');
+      throw new HttpError(401, 'Invalid or expired refresh token');
     }
     throw error;
   }
 }));
 
 // Logout endpoint (optional - for revoking refresh tokens)
-router.post('/logout', asyncHandler(async (req, res) => {
+router.post('/logout', asyncHandler(async (_req, res) => {
   // In a real app, you would invalidate the refresh token in Redis or database
   // For this example, we'll just return success
   res.json({ message: 'Logged out successfully' });

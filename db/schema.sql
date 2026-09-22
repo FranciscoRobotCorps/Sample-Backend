@@ -7,6 +7,23 @@ CREATE DATABASE IF NOT EXISTS hermes
 
 USE hermes;
 
+-- Users table (credentials stored in DB instead of hardcoded)
+CREATE TABLE IF NOT EXISTS users (
+  id          INT UNSIGNED     NOT NULL AUTO_INCREMENT,
+  email       VARCHAR(255)     NOT NULL,
+  password_hash VARCHAR(60)    NOT NULL, -- bcrypt hash (always 60 chars)
+  created_at  TIMESTAMP        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  TIMESTAMP        NOT NULL DEFAULT CURRENT_TIMESTAMP
+                             ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_users_email (email)
+) ENGINE=InnoDB;
+
+-- Insert default user: email=user@example.com, password=password123
+INSERT IGNORE INTO users (email, password_hash) VALUES
+  ('user@example.com', '$2b$10$7a8F7dT2CPGnjPfwH54n.uQYO8w9KKEaFjj9QzWkWlKgFRnSKV7n6');
+
+-- Todos table
 CREATE TABLE IF NOT EXISTS todos (
   id          INT UNSIGNED     NOT NULL AUTO_INCREMENT,
   title       VARCHAR(255)     NOT NULL,
