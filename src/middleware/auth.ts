@@ -49,7 +49,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-    req.user = decoded;
+    (req as any).user = decoded;
     next();
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError) {
@@ -74,7 +74,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-    req.user = decoded;
+    (req as any).user = decoded;
     next();
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError) {

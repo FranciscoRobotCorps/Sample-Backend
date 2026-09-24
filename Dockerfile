@@ -1,4 +1,4 @@
-# ---- Build stage ----
+# ---- Build stage (shared with Dockerfile) ----
 FROM node:20-alpine AS build
 
 WORKDIR /app
@@ -6,12 +6,15 @@ WORKDIR /app
 # Copy dependency files first (for better layer caching)
 COPY package.json package-lock.json ./
 
-RUN npm ci --ignore-scripts --omit=dev 2>&1 || true \
-    && npm ci 2>&1
+# Install ALL dependencies including devDependencies (needed for tests)
+RUN npm ci
+#RUN npm ci --ignore-scripts --omit=dev 2>&1 || true && npm ci 2>&1
 
-# Copy source code and build
+# Copy source code, tests and build
 COPY tsconfig.json ./
+COPY jest.config.js ./
 COPY src/ ./src/
+COPY tests/ ./tests/
 
 RUN npm run build 2>&1
 
@@ -25,9 +28,13 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 # Copy only production dependencies and built output
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev 2>&1
+RUN npm ci 2>&1
 
 COPY --from=build /app/dist/ ./dist/
+COPY --from=build /app/src/ ./src/
+COPY --from=build /app/tests/ ./tests/
+COPY --from=build /app/jest.config.js ./jest.config.js
+COPY --from=build /app/tsconfig.json ./tsconfig.json
 
 # Switch to non-root user
 USER appuser

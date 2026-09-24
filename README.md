@@ -1,4 +1,4 @@
-# hermes-api
+# hermes-api (app is the container name)
 
 A small backend API built with **Node.js + Express + TypeScript**, using **zod** for request validation and **MariaDB** (via `mysql2`) as the database.
 
