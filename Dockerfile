@@ -12,7 +12,7 @@ RUN npm ci
 
 # Copy source code, tests and build
 COPY tsconfig.json ./
-COPY jest.config.js ./
+COPY jest.config.ts ./
 COPY src/ ./src/
 COPY tests/ ./tests/
 
@@ -33,7 +33,7 @@ RUN npm ci 2>&1
 COPY --from=build /app/dist/ ./dist/
 COPY --from=build /app/src/ ./src/
 COPY --from=build /app/tests/ ./tests/
-COPY --from=build /app/jest.config.js ./jest.config.js
+COPY --from=build /app/jest.config.ts ./jest.config.ts
 COPY --from=build /app/tsconfig.json ./tsconfig.json
 
 # Switch to non-root user
