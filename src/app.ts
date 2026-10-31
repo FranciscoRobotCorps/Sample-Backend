@@ -25,6 +25,11 @@ export function createApp(): express.Express {
     res.status(db.status === 'ok' ? 200 : 503).json({ status: db.status === 'ok' ? 'ok' : 'degraded', db });
   });
 
+  // Root endpoint
+  app.get('/', (_req, res) => {
+    res.status(200).json({ message: 'Hermes API is running' });
+  });
+
   // Authentication routes
   app.use('/api/auth', authRouter);
   
